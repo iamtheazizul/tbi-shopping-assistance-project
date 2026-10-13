@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Store Route Planner</title>
+<style>
+  :root{
+    --bg:#fafaf8; --panel:#ffffff; --text:#1d1d1b; --muted:#6b6b66; --line:#d9d8d2;
+    --edge:#c4c3bb; --node:#eceae3; --node-stroke:#9a998f; --accent:#d9480f; --start:#2b8a3e; --end:#1c64f2;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#161616; --panel:#1f1f1f; --text:#ececea; --muted:#9a9a94; --line:#333;
+      --edge:#4a4a46; --node:#2a2a28; --node-stroke:#77766e; --accent:#ff8c4a; --start:#51cf66; --end:#74a7ff; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text)}
+  .app{display:grid;grid-template-columns:340px 1fr;min-height:100vh}
+  aside{padding:16px;border-right:1px solid var(--line);background:var(--panel);overflow:auto;max-height:100vh}
+  main{padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+  h1{font-size:16px;margin:0 0 12px}
+  label{display:block;font-size:12px;color:var(--muted);margin:12px 0 4px}
+  textarea,input{width:100%;font:12px ui-monospace,Menlo,monospace;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px}
+  textarea{height:150px;resize:vertical;white-space:pre}
+  .row{display:flex;gap:8px}
+  button{margin-top:14px;width:100%;padding:10px;border:0;border-radius:6px;background:var(--accent);color:#fff;font-weight:600;font-size:14px;cursor:pointer}
+  .stat{display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
+  .stat b{font-size:22px}
+  .stat span{color:var(--muted)}
+  #wrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  svg{display:block;width:100%;height:560px;touch-action:none}
+  .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+  ol{margin:0;padding-left:22px}
+  ol li{margin:4px 0}
+  .warn{background:#fff3bf;color:#5c4a00;border-radius:6px;padding:8px 10px;font-size:12px;margin:6px 0}
+  @media (prefers-color-scheme: dark){.warn{background:#3d3300;color:#ffe066}}
+  .err{background:#ffe3e3;color:#a61e1e;border-radius:6px;padding:8px 10px;font-size:12px}
+  @media (max-width:820px){.app{grid-template-columns:1fr}aside{max-height:none;border-right:0;border-bottom:1px solid var(--line)}}
+
+  .nav{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .navbtn{margin:0;width:auto;padding:8px 14px;background:var(--bg);color:var(--text);border:1px solid var(--line);font-size:16px;font-weight:600}
+  .navbtn:disabled{opacity:.35;cursor:default}
+  .navbtn:not(:disabled):hover{border-color:var(--accent);color:var(--accent)}
+  #overview{font-size:12px;margin-left:auto;white-space:nowrap}
+  #navtext{flex:1;min-width:0}
+  #navtext small{display:block;color:var(--muted);font-size:12px}
+  #steps li{cursor:pointer;padding:3px 6px;border-radius:5px;list-style-position:inside}
+  #steps li:hover{background:var(--panel)}
+  #steps li.cur{background:var(--panel);outline:1px solid var(--accent);font-weight:600}
+  #matches{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12px}
+  .chip em{color:var(--accent);font-style:normal}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <h1>Store Route Planner</h1>
+    <label>Store layout (CSV)</label>
+    <textarea id="layout" spellcheck="false"></textarea>
+    <label>Shopping list (one product per line)</label>
+    <textarea id="list" spellcheck="false" style="height:110px"></textarea>
+    <div class="row">
+      <div><label>Start</label><input id="start" value="Entrance (Grocery)"></div>
+      <div><label>End</label><input id="end" value="Checkout"></div>
+    </div>
+    <button id="go">Plan route</button>
+  </aside>
+  <main>
+    <div id="msgs"></div>
+    <div id="matches"></div>
+    <div class="stat"><b id="total">–</b><span id="sub"></span></div>
+    <div class="nav">
+      <button class="navbtn" id="prev" aria-label="Previous step" title="Previous (←)">◀</button>
+      <button class="navbtn" id="next" aria-label="Next step" title="Next (→)">▶</button>
+      <div id="navtext"></div>
+      <button class="navbtn" id="overview" title="Show the whole route">Full route</button>
+    </div>
+    <div id="wrap"><svg id="svg" viewBox="0 0 900 560"></svg></div>
+    <div class="legend">
+      <span><i style="background:var(--start)"></i>start</span>
+      <span><i style="background:var(--accent)"></i>stop (numbered in visit order)</span>
+      <span><i style="background:var(--end)"></i>end</span>
+      <span>Use ← → keys or the buttons to walk the route. Drag nodes to rearrange.</span>
+    </div>
+    <ol id="steps"></ol>
+  </main>
+</div>
+
+<script>
+/* ===== routing library (same code as storeRoute.js) ===== */
+// storeRoute.js — parse a store layout table, build a graph, plan the shortest shopping route.
+// Pure ES module, no dependencies: works in Node and in a React app.
+
+const norm = (s) => s.trim().toLowerCase().replace(/\s+/g, " ");
+
+/* ---------------------------------------------------------------- CSV */
+// Small CSV parser that supports quoted fields (needed for "Aisle 2, Produce, Entrance").
+function parseCSV(text) {
+  const rows = [];
+  let row = [], cell = "", inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (c === '"') inQuotes = false;
+      else cell += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell); cell = "";
+      if (row.some((x) => x.trim() !== "")) rows.push(row);
+      row = [];
+    } else cell += c;
+  }
+  row.push(cell);
+  if (row.some((x) => x.trim() !== "")) rows.push(row);
+  return rows;
+}
+
+/** Turn CSV text into [{section, nextTo, notes}] using the header row. */
+function parseLayoutRows(csvText) {
+  const [header, ...body] = parseCSV(csvText);
+  const col = (name) => header.findIndex((h) => norm(h) === name);
+  const iName = col("section name"), iNext = col("next to"), iNotes = col("notes");
+  const iItems = col("items") >= 0 ? col("items") : col("products");
+  if (iName < 0 || iNext < 0) throw new Error('Layout needs "Section name" and "Next to" columns');
+  return body
+    .map((r) => ({
+      section: (r[iName] ?? "").trim(),
+      nextTo: (r[iNext] ?? "").trim(),
+      notes: iNotes >= 0 ? (r[iNotes] ?? "").trim() : "",
+      items: iItems >= 0 ? (r[iItems] ?? "").split(/[,;]/).map((x) => x.trim()).filter(Boolean) : [],
+    }))
+    .filter((r) => r.section);
+}
+
+/* -------------------------------------------------------------- Graph */
+// "Aisle 1 (10m)" -> { name: "Aisle 1", weight: 10 }
+function parseNeighbor(token) {
+  const m = token.match(/^(.*?)\s*\(\s*(\d+(?:\.\d+)?)\s*m?\s*\)\s*$/i);
+  return m ? { name: m[1].trim(), weight: parseFloat(m[2]) } : { name: token.trim(), weight: null };
+}
+
+/**
+ * Build an undirected weighted graph.
+ * - Every row = a node. "Next to" entries = edges (made symmetric automatically).
+ * - Optional "(10m)" after a neighbour sets the distance; otherwise defaultDistance is used.
+ * - Loose references like "Entrance" are resolved to the matching section
+ *   (exact name > unique prefix > the candidate that also points back at this node).
+ */
+function buildGraph(rows, { defaultDistance = 10 } = {}) {
+  const warnings = [];
+  const nodes = rows.map((r) => ({ id: r.section, notes: r.notes, items: r.items ?? [] }));
+  const byKey = new Map(nodes.map((n) => [norm(n.id), n.id]));
+  const raw = new Map(rows.map((r) => [r.section, r.nextTo.split(",").map(parseNeighbor).filter((n) => n.name)]));
+
+  const resolve = (ref, from) => {
+    const key = norm(ref);
+    if (byKey.has(key)) return byKey.get(key);
+    const cands = nodes.filter((n) => norm(n.id).startsWith(key)).map((n) => n.id);
+    if (cands.length === 1) return cands[0];
+    if (cands.length > 1) {
+      const back = cands.filter((c) =>
+        (raw.get(c) ?? []).some((n) => norm(n.name) === norm(from) || norm(from).startsWith(norm(n.name)))
+      );
+      if (back.length === 1) return back[0];
+      warnings.push(`"${from}" → "${ref}" is ambiguous (${cands.join(" | ")}); edge skipped`);
+      return null;
+    }
+    warnings.push(`"${from}" → "${ref}" doesn't match any section; edge skipped`);
+    return null;
+  };
+
+  const edgeMap = new Map(); // "a||b" (sorted) -> {a, b, weight, explicit}
+  for (const [from, neighbors] of raw) {
+    for (const { name, weight } of neighbors) {
+      const to = resolve(name, from);
+      if (!to || to === from) continue;
+      const [a, b] = [from, to].sort();
+      const k = `${a}||${b}`;
+      const prev = edgeMap.get(k);
+      const w = weight ?? defaultDistance;
+      if (!prev) edgeMap.set(k, { a, b, weight: w, explicit: weight != null });
+      else if (weight != null && (!prev.explicit || weight < prev.weight)) {
+        prev.weight = weight; prev.explicit = true;
+      }
+    }
+  }
+
+  const edges = [...edgeMap.values()].map(({ a, b, weight }) => ({ source: a, target: b, weight }));
+  const adj = new Map(nodes.map((n) => [n.id, []]));
+  for (const e of edges) {
+    adj.get(e.source).push({ to: e.target, w: e.weight });
+    adj.get(e.target).push({ to: e.source, w: e.weight });
+  }
+  return { nodes, edges, adj, byKey, warnings };
+}
+
+/** Case-insensitive section lookup against a built graph (exact, then unique prefix). */
+function findSection(graph, name) {
+  const key = norm(name);
+  if (graph.byKey.has(key)) return graph.byKey.get(key);
+  const c = graph.nodes.filter((n) => norm(n.id).startsWith(key));
+  return c.length === 1 ? c[0].id : null;
+}
+
+/* ----------------------------------------------------------- Shortest */
+function dijkstra(graph, source) {
+  const dist = new Map(graph.nodes.map((n) => [n.id, Infinity]));
+  const prev = new Map();
+  const todo = new Set(graph.nodes.map((n) => n.id));
+  dist.set(source, 0);
+  while (todo.size) {
+    let u = null;
+    for (const id of todo) if (u === null || dist.get(id) < dist.get(u)) u = id;
+    if (dist.get(u) === Infinity) break;
+    todo.delete(u);
+    for (const { to, w } of graph.adj.get(u)) {
+      const alt = dist.get(u) + w;
+      if (alt < dist.get(to)) { dist.set(to, alt); prev.set(to, u); }
+    }
+  }
+  return { dist, prev };
+}
+
+const pathTo = (prev, target) => {
+  const p = [target];
+  while (prev.has(p[0])) p.unshift(prev.get(p[0]));
+  return p;
+};
+
+/* ------------------------------------------------------ Item matching */
+// Lightweight singularizer so "tomatoes" = "tomato", "batteries" = "battery", "eggs" = "egg".
+const singular = (w) =>
+  w.length < 4 ? w : w.replace(/ies$/, "y").replace(/(o|ch|sh|ss|x)es$/, "$1").replace(/(?<![su])s$/, "");
+const normItem = (s) =>
+  s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean).map(singular).join(" ");
+
+function lev(a, b) {
+  const m = a.length, n = b.length;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++)
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[n];
+}
+
+function buildItemIndex(graph) {
+  const entries = [];
+  for (const n of graph.nodes)
+    for (const item of n.items ?? []) {
+      const key = normItem(item);
+      if (key) entries.push({ section: n.id, item, key, words: key.split(" ") });
+    }
+  return entries;
+}
+
+/**
+ * Find which store item(s) a typed product refers to.
+ * Order: exact (ignoring case/plurals) > partial ("cherry tomato" ~ "Tomato") > fuzzy typo (1-2 edits).
+ * Returns { type, candidates:[{section,item}], suggestions:[] }.
+ */
+function matchProduct(entries, name) {
+  const q = normItem(name);
+  if (!q) return { type: null, candidates: [], suggestions: [] };
+  const qw = q.split(" ");
+
+  let c = entries.filter((e) => e.key === q);
+  if (c.length) return { type: "exact", candidates: c, suggestions: [] };
+
+  c = entries.filter((e) => e.words.every((w) => qw.includes(w)) || qw.every((w) => e.words.includes(w)));
+  if (c.length) {
+    const best = Math.min(...c.map((e) => Math.abs(e.words.length - qw.length)));
+    return { type: "partial", candidates: c.filter((e) => Math.abs(e.words.length - qw.length) === best), suggestions: [] };
+  }
+
+  const scored = entries.map((e) => ({ e, d: lev(e.key, q) })).sort((a, b) => a.d - b.d);
+  const limit = q.length >= 8 ? 2 : q.length >= 4 ? 1 : 0;
+  const close = scored.filter((x) => x.d <= limit);
+  if (close.length) {
+    const m = close[0].d;
+    return { type: "fuzzy", candidates: close.filter((x) => x.d === m).map((x) => x.e), suggestions: [] };
+  }
+  const suggestions = [...new Set(scored.filter((x) => x.d <= Math.max(3, Math.ceil(q.length / 2))).slice(0, 3).map((x) => x.e.item))];
+  return { type: null, candidates: [], suggestions };
+}
+
+/**
+ * Shopping list text -> [{product, section?}].
+ * - Plain list: one product per line (commas also split products).
+ * - With a header row "Product,Section", the Section column is used as an explicit override.
+ */
+function parseShoppingList(text) {
+  const rows = parseCSV(text);
+  if (!rows.length) return [];
+  const head = rows[0].map(norm);
+  if (["product", "products", "item", "items"].includes(head[0])) {
+    const si = head.indexOf("section");
+    return rows.slice(1)
+      .map((r) => ({ product: (r[0] ?? "").trim(), section: si >= 0 && (r[si] ?? "").trim() ? r[si].trim() : undefined }))
+      .filter((p) => p.product);
+  }
+  return rows.flat().map((x) => ({ product: x.trim() })).filter((p) => p.product);
+}
+
+/* ------------------------------------------------------------ Planner */
+/**
+ * Plan the shortest walk: start → visit every needed section → end.
+ * Exact (Held-Karp DP) for up to 12 distinct sections, nearest-neighbour + 2-opt beyond that.
+ *
+ * @param graph        result of buildGraph()
+ * @param shoppingList [{product, section}]
+ * @param opts         { start?: string, end?: string }  start defaults to the first "Entrance*"
+ *                     section; end defaults to "Checkout" if it exists.
+ */
+function planRoute(graph, shoppingList, opts = {}) {
+  const warnings = [...graph.warnings];
+
+  const start =
+    (opts.start && findSection(graph, opts.start)) ||
+    graph.nodes.find((n) => norm(n.id).startsWith("entrance"))?.id;
+  if (!start) throw new Error("No start section found (pass opts.start)");
+  const end = findSection(graph, opts.end ?? "Checkout") ?? null;
+
+  // Resolve each product to a section using the layout's Items column (or an explicit Section).
+  const index = buildItemIndex(graph);
+  const dStart = dijkstra(graph, start).dist;
+  const unmatched = [], matches = [], resolved = [];
+  for (const { product, section } of shoppingList) {
+    if (section) {
+      const id = findSection(graph, section);
+      if (!id) { unmatched.push({ product, section, reason: "Section not in store layout", suggestions: [] }); continue; }
+      resolved.push({ product, type: "explicit", candidates: [{ section: id, item: null }] });
+      continue;
+    }
+    const m = matchProduct(index, product);
+    const cands = m.candidates.filter((c) => dStart.get(c.section) !== Infinity);
+    if (!cands.length) {
+      unmatched.push({
+        product, section: null,
+        reason: m.candidates.length ? "Its section isn't connected to the start" : "Not found in the store layout",
+        suggestions: m.suggestions,
+      });
+      continue;
+    }
+    resolved.push({ product, type: m.type, candidates: cands });
+  }
+
+  // Items sold in several sections: prefer a section we're already visiting, otherwise the nearest one.
+  const uniq = (r) => [...new Set(r.candidates.map((c) => c.section))];
+  const chosen = new Set(resolved.filter((r) => uniq(r).length === 1).map((r) => uniq(r)[0]));
+  const productsBySection = new Map();
+  for (const r of resolved) {
+    const secs = uniq(r);
+    let pick = secs[0];
+    if (secs.length > 1) {
+      const already = secs.filter((x) => chosen.has(x));
+      pick = (already.length ? already : secs).reduce((x, y) => (dStart.get(y) < dStart.get(x) ? y : x));
+      chosen.add(pick);
+    }
+    if (!productsBySection.has(pick)) productsBySection.set(pick, []);
+    productsBySection.get(pick).push(r.product);
+    matches.push({
+      product: r.product, section: pick, type: r.type,
+      matchedItem: r.candidates.find((c) => c.section === pick)?.item ?? null,
+      alternatives: secs.filter((x) => x !== pick),
+    });
+  }
+
+  // Shortest-path tables from every point that matters.
+  const targets = [...productsBySection.keys()].filter((s) => s !== start && s !== end);
+  const keyPoints = [...new Set([start, ...targets, ...(end ? [end] : [])])];
+  const sp = new Map(keyPoints.map((k) => [k, dijkstra(graph, k)]));
+  const D = (a, b) => sp.get(a).dist.get(b);
+
+  const unreachable = targets.filter((t) => D(start, t) === Infinity);
+  for (const t of unreachable) {
+    for (const p of productsBySection.get(t)) unmatched.push({ product: p, section: t, reason: "Not connected to the start" });
+    productsBySection.delete(t);
+  }
+  const stops = targets.filter((t) => !unreachable.includes(t));
+
+  // Order the stops.
+  const order = stops.length <= 12 ? heldKarp(start, stops, end, D) : heuristic(start, stops, end, D);
+  const sequence = [start, ...order, ...(end ? [end] : [])];
+
+  // Expand to the full walking path + per-stop details.
+  const path = [start];
+  const route = [];
+  let total = 0;
+  for (let i = 0; i < sequence.length; i++) {
+    const section = sequence[i];
+    let leg = [section], legDist = 0;
+    if (i > 0) {
+      leg = pathTo(sp.get(sequence[i - 1]).prev, section);
+      legDist = D(sequence[i - 1], section);
+      path.push(...leg.slice(1));
+      total += legDist;
+    }
+    route.push({
+      order: i,
+      section,
+      products: productsBySection.get(section) ?? [],
+      distanceFromPrevious: legDist,
+      walkingPath: leg,
+      role: i === 0 ? "start" : i === sequence.length - 1 && end ? "end" : "stop",
+    });
+  }
+
+  const steps = route.map((r) =>
+    r.role === "start"
+      ? `Start at ${r.section}${r.products.length ? ` — pick up ${r.products.join(", ")}` : ""}`
+      : `Walk ${r.walkingPath.join(" → ")} (${r.distanceFromPrevious}m)${r.products.length ? ` — pick up ${r.products.join(", ")}` : ""}`
+  );
+
+  return { start, end, totalDistance: total, route, path, steps, matches, unmatched, warnings };
+}
+
+function heldKarp(start, stops, end, D) {
+  const n = stops.length;
+  if (n === 0) return [];
+  const FULL = 1 << n;
+  const dp = Array.from({ length: FULL }, () => new Array(n).fill(Infinity));
+  const parent = Array.from({ length: FULL }, () => new Array(n).fill(-1));
+  for (let i = 0; i < n; i++) dp[1 << i][i] = D(start, stops[i]);
+  for (let mask = 1; mask < FULL; mask++)
+    for (let last = 0; last < n; last++) {
+      if (!(mask & (1 << last)) || dp[mask][last] === Infinity) continue;
+      for (let nxt = 0; nxt < n; nxt++) {
+        if (mask & (1 << nxt)) continue;
+        const nm = mask | (1 << nxt);
+        const c = dp[mask][last] + D(stops[last], stops[nxt]);
+        if (c < dp[nm][nxt]) { dp[nm][nxt] = c; parent[nm][nxt] = last; }
+      }
+    }
+  let best = Infinity, bestLast = 0;
+  for (let i = 0; i < n; i++) {
+    const c = dp[FULL - 1][i] + (end ? D(stops[i], end) : 0);
+    if (c < best) { best = c; bestLast = i; }
+  }
+  const out = [];
+  let mask = FULL - 1, cur = bestLast;
+  while (cur !== -1) { out.unshift(stops[cur]); const p = parent[mask][cur]; mask ^= 1 << cur; cur = p; }
+  return out;
+}
+
+function heuristic(start, stops, end, D) {
+  const left = new Set(stops), order = [];
+  let cur = start;
+  while (left.size) {
+    let best = null;
+    for (const s of left) if (best === null || D(cur, s) < D(cur, best)) best = s;
+    order.push(best); left.delete(best); cur = best;
+  }
+  const len = (o) => [start, ...o, ...(end ? [end] : [])].reduce((a, s, i, arr) => (i ? a + D(arr[i - 1], s) : 0), 0);
+  let improved = true;
+  while (improved) {
+    improved = false;
+    for (let i = 0; i < order.length - 1; i++)
+      for (let j = i + 1; j < order.length; j++) {
+        const cand = [...order.slice(0, i), ...order.slice(i, j + 1).reverse(), ...order.slice(j + 1)];
+        if (len(cand) < len(order)) { order.splice(0, order.length, ...cand); improved = true; }
+      }
+  }
+  return order;
+}
+
+/* ------------------------------------------------------ One-call API */
+function planFromCSV(layoutCsv, listCsv, opts = {}) {
+  const graph = buildGraph(parseLayoutRows(layoutCsv), opts);
+  const shoppingList = parseShoppingList(listCsv);
+  return { graph: { nodes: graph.nodes, edges: graph.edges }, ...planRoute(graph, shoppingList, opts) };
+}
+
+/* ===== data ===== */
+const DATA = {"layout": "Section name,Next to,Items,Notes\nEntrance (Grocery),Aisle 1 (10m),,This entrance is on the rightmost side and leads to the grocery station directly\nEntrance (Home and Appliances),Aisle B4,,\nAisle 1,\"Aisle 2, Produce, Entrance\",\"Rice, Flour, Sugar, Salt, Cooking oil\",\nAisle 2,\"Aisle 1, Aisle 3, Dairy\",\"Cereal, Oats, Coffee, Tea, Cookies\",\nAisle 3,\"Aisle 2, Aisle 4, Bakery\",\"Pasta, Pasta sauce, Canned beans, Soup, Chips\",\nAisle 4,\"Aisle 3, Checkout, Frozen (5m)\",\"Water, Soda, Juice, Granola bars\",\nProduce,\"Aisle 1, Dairy (6m)\",\"Tomato, Spinach, Onion, Potato, Banana, Apple, Lettuce, Avocado\",\nDairy,\"Produce, Aisle 2, Bakery (6m)\",\"Milk, Eggs, Cheese, Yogurt, Butter\",\nBakery,\"Dairy, Aisle 3, Frozen (6m)\",\"Bread, Bagels, Croissant, Muffins\",\nFrozen,\"Bakery, Aisle 4, Checkout (8m)\",\"Ice cream, Frozen pizza, Frozen vegetables\",\nCheckout,\"Aisle 4, Frozen, Aisle B1 (12m)\",\"Batteries, Gum, Candy, Chips\",\nAisle B1,\"Checkout, Aisle B2, Electronics (4m)\",\"Phone charger, Cables\",\nAisle B2,\"Aisle B1, Aisle B3\",\"Toaster, Kettle, Blender\",\nAisle B3,\"Aisle B2, Aisle B4, Household (4m)\",\"Pots, Pans, Towels\",\nAisle B4,\"Aisle B3, Entrance (Home and Appliances)\",\"Lamps, Fans\",\nElectronics,Aisle B1,\"Headphones, Speakers\",\nHousehold,Aisle B3,\"Light bulbs, Cleaning spray, Sponges, Trash bags\",\n", "list": "Product\nTomatoes\nBatteries\nmilk\nBread\nIce cream\nPasta\nLight bulbs\nSpinach\nChips\nCherry tomato\nBananna\nUnicorn tears\n"};
+
+/* ===== UI ===== */
+const $ = (id) => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const W = 900, H = 560;
+const el = (name, attrs = {}, parent) => {
+  const e = document.createElementNS(NS, name);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const key = (a, b) => [a, b].sort().join("||");
+
+let pos = {};          // id -> {x,y,vx,vy,fixed}
+let sim = { nodes: [], edges: [], alpha: 0, raf: 0 };
+let refs = { edges: [], nodes: {} };
+
+function initPositions(ids) {
+  const keep = pos; pos = {};
+  ids.forEach((id, i) => {
+    if (keep[id]) { pos[id] = { ...keep[id], vx: 0, vy: 0 }; return; }
+    const a = (i / ids.length) * Math.PI * 2;
+    pos[id] = { x: W/2 + Math.cos(a)*220 + Math.random()*20, y: H/2 + Math.sin(a)*190 + Math.random()*20, vx: 0, vy: 0 };
+  });
+}
+
+function tick() {
+  const ids = sim.nodes.map((n) => n.id);
+  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
+    const a = pos[ids[i]], b = pos[ids[j]];
+    let dx = a.x - b.x, dy = a.y - b.y, d2 = dx*dx + dy*dy || 0.01, d = Math.sqrt(d2);
+    const f = 9000 / d2;
+    dx /= d; dy /= d;
+    a.vx += dx*f; a.vy += dy*f; b.vx -= dx*f; b.vy -= dy*f;
+  }
+  for (const e of sim.edges) {
+    const a = pos[e.source], b = pos[e.target];
+    let dx = b.x - a.x, dy = b.y - a.y, d = Math.sqrt(dx*dx + dy*dy) || 0.01;
+    const rest = 45 + e.weight * 5, f = (d - rest) * 0.03;
+    dx /= d; dy /= d;
+    a.vx += dx*f; a.vy += dy*f; b.vx -= dx*f; b.vy -= dy*f;
+  }
+  for (const id of ids) {
+    const p = pos[id];
+    p.vx += (W/2 - p.x) * 0.003; p.vy += (H/2 - p.y) * 0.003;
+    if (!p.fixed) {
+      p.x += p.vx * sim.alpha; p.y += p.vy * sim.alpha;
+      p.x = Math.max(40, Math.min(W - 40, p.x)); p.y = Math.max(30, Math.min(H - 30, p.y));
+    }
+    p.vx *= 0.8; p.vy *= 0.8;
+  }
+  sim.alpha *= 0.985;
+}
+
+function paint() {
+  refs.edges.forEach(({ e, line, label }) => {
+    const a = pos[e.source], b = pos[e.target];
+    line.setAttribute("x1", a.x); line.setAttribute("y1", a.y);
+    line.setAttribute("x2", b.x); line.setAttribute("y2", b.y);
+    label.setAttribute("x", (a.x + b.x) / 2); label.setAttribute("y", (a.y + b.y) / 2 - 3);
+  });
+  for (const id in refs.nodes) refs.nodes[id].setAttribute("transform", `translate(${pos[id].x},${pos[id].y})`);
+}
+
+function loop() {
+  tick(); paint();
+  sim.raf = sim.alpha > 0.02 ? requestAnimationFrame(loop) : 0;
+}
+function reheat(a = 1) { sim.alpha = Math.max(sim.alpha, a); if (!sim.raf) sim.raf = requestAnimationFrame(loop); }
+
+let view = { plan: null, cur: -1, stopEnd: [], pathIdx: new Map() };
+
+function draw(plan) {
+  const svg = $("svg"); svg.innerHTML = "";
+  const gE = el("g", {}, svg), gN = el("g", {}, svg);
+  sim.nodes = plan.graph.nodes; sim.edges = plan.graph.edges;
+  initPositions(sim.nodes.map((n) => n.id));
+
+  // index of the route's walking path: which path steps cross which edge, and where each stop ends
+  view = { plan, cur: -1, stopEnd: [], pathIdx: new Map() };
+  for (let i = 1; i < plan.path.length; i++) {
+    const k = key(plan.path[i-1], plan.path[i]);
+    if (!view.pathIdx.has(k)) view.pathIdx.set(k, []);
+    view.pathIdx.get(k).push(i);
+  }
+  let idx = 0;
+  plan.route.forEach((r, i) => { if (i > 0) idx += r.walkingPath.length - 1; view.stopEnd.push(idx); });
+
+  const stopInfo = {};
+  plan.route.forEach((r) => (stopInfo[r.section] = r));
+  refs = { edges: [], nodes: {}, nodeParts: {} };
+
+  [...sim.edges].sort((a, b) => !!view.pathIdx.get(key(a.source, a.target)) - !!view.pathIdx.get(key(b.source, b.target))).forEach((e) => {
+    const line = el("line", { "stroke-linecap": "round" }, gE);
+    const label = el("text", { "font-size": 10, fill: "var(--muted)", "text-anchor": "middle" }, gE);
+    label.textContent = e.weight + "m";
+    refs.edges.push({ e, line, label });
+  });
+
+  sim.nodes.forEach((n) => {
+    const g = el("g", { style: "cursor:grab" }, gN);
+    const info = stopInfo[n.id];
+    const color = !info ? "var(--node)" : info.role === "start" ? "var(--start)" : info.role === "end" ? "var(--end)" : "var(--accent)";
+    const ring = el("circle", { r: 24, fill: "none", stroke: "var(--accent)", "stroke-width": 3, display: "none" }, g);
+    el("circle", { r: info ? 15 : 11, fill: color, stroke: info ? "none" : "var(--node-stroke)", "stroke-width": 1.5 }, g);
+    if (info) {
+      const t = el("text", { "text-anchor": "middle", dy: 4, "font-size": 12, "font-weight": 700, fill: "#fff", "pointer-events": "none" }, g);
+      t.textContent = info.role === "start" ? "S" : info.order;
+    }
+    const name = el("text", { "text-anchor": "middle", y: (info ? 15 : 11) + 13, "font-size": 11, fill: "var(--text)", "pointer-events": "none" }, g);
+    name.textContent = n.id;
+    if (info && info.products.length) {
+      const p = el("text", { "text-anchor": "middle", y: (info ? 15 : 11) + 25, "font-size": 10, "font-style": "italic", fill: "var(--accent)", "pointer-events": "none" }, g);
+      p.textContent = info.products.join(", ");
+    }
+    refs.nodes[n.id] = g;
+    refs.nodeParts[n.id] = { ring, info };
+
+    g.addEventListener("pointerdown", (ev) => {
+      g.setPointerCapture(ev.pointerId); pos[n.id].fixed = true; g.style.cursor = "grabbing"; reheat(0.3);
+    });
+    g.addEventListener("pointermove", (ev) => {
+      if (!pos[n.id].fixed) return;
+      const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+      const m = pt.matrixTransform(svg.getScreenCTM().inverse());
+      pos[n.id].x = m.x; pos[n.id].y = m.y; reheat(0.15); paint();
+    });
+    const release = () => { pos[n.id].fixed = false; g.style.cursor = "grab"; };
+    g.addEventListener("pointerup", release); g.addEventListener("pointercancel", release);
+  });
+
+  $("steps").innerHTML = plan.steps.map((s, i) =>
+    `<li data-i="${i}">${s.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</li>`).join("");
+  document.querySelectorAll("#steps li").forEach((li) =>
+    li.addEventListener("click", () => setStep(+li.dataset.i)));
+
+  sim.alpha = 1; for (let i = 0; i < 250; i++) tick();
+  sim.alpha = 0.3; paint(); reheat(0.3);
+  setStep(-1);
+}
+
+const EDGE_STYLE = {
+  none:    { stroke: "var(--edge)",   w: 1.5, op: 1,   dash: "" },
+  all:     { stroke: "var(--accent)", w: 4,   op: 0.9, dash: "" },
+  current: { stroke: "var(--accent)", w: 6,   op: 1,   dash: "" },
+  done:    { stroke: "var(--accent)", w: 4,   op: 0.4, dash: "" },
+  future:  { stroke: "var(--accent)", w: 2,   op: 0.5, dash: "5 5" },
+};
+
+function setStep(s) {
+  const { plan, stopEnd, pathIdx } = view;
+  if (!plan) return;
+  const last = plan.route.length - 1;
+  s = Math.max(-1, Math.min(last, s));
+  view.cur = s;
+
+  const lo = s > 0 ? stopEnd[s - 1] : 0;
+  const hi = s >= 0 ? stopEnd[s] : Infinity;
+
+  refs.edges.forEach(({ e, line, label }) => {
+    const idxs = pathIdx.get(key(e.source, e.target)) || [];
+    let st = "none";
+    if (idxs.length) {
+      if (s < 0) st = "all";
+      else if (idxs.some((i) => i > lo && i <= hi)) st = "current";
+      else if (idxs.some((i) => i <= lo)) st = "done";
+      else st = "future";
+    }
+    const x = EDGE_STYLE[st];
+    line.setAttribute("stroke", x.stroke); line.setAttribute("stroke-width", x.w);
+    line.setAttribute("opacity", x.op);
+    if (x.dash) line.setAttribute("stroke-dasharray", x.dash); else line.removeAttribute("stroke-dasharray");
+  });
+
+  for (const id in refs.nodeParts) {
+    const { ring, info } = refs.nodeParts[id];
+    const visited = !info || s < 0 || info.order <= s;
+    refs.nodes[id].setAttribute("opacity", visited ? 1 : 0.45);
+    ring.setAttribute("display", info && s >= 0 && info.order === s ? "inline" : "none");
+  }
+
+  document.querySelectorAll("#steps li").forEach((li) => li.classList.toggle("cur", +li.dataset.i === s));
+
+  $("prev").disabled = s < 0;
+  $("next").disabled = s >= last;
+  $("overview").disabled = s < 0;
+
+  if (s < 0) {
+    $("navtext").innerHTML = `<b>Full route</b><small>${plan.route.length} stops · ${plan.totalDistance} m · press → to start walking</small>`;
+  } else {
+    const walked = plan.route.slice(0, s + 1).reduce((a, r) => a + r.distanceFromPrevious, 0);
+    const r = plan.route[s];
+    const pick = r.products.length ? `Pick up: ${r.products.join(", ")}` : "No pickups here";
+    $("navtext").innerHTML =
+      `<b>Step ${s + 1} of ${plan.route.length} — ${r.section.replace(/</g,"&lt;")}</b>` +
+      `<small>${pick.replace(/</g,"&lt;")} · ${walked} of ${plan.totalDistance} m walked</small>`;
+  }
+  const curLi = document.querySelector("#steps li.cur");
+  if (curLi && curLi.scrollIntoView) curLi.scrollIntoView({ block: "nearest" });
+}
+
+$("prev").addEventListener("click", () => setStep(view.cur - 1));
+$("next").addEventListener("click", () => setStep(view.cur + 1));
+$("overview").addEventListener("click", () => setStep(-1));
+document.addEventListener("keydown", (ev) => {
+  if (/^(INPUT|TEXTAREA)$/.test(ev.target.tagName)) return;
+  if (ev.key === "ArrowRight") { ev.preventDefault(); setStep(view.cur + 1); }
+  if (ev.key === "ArrowLeft")  { ev.preventDefault(); setStep(view.cur - 1); }
+  if (ev.key === "Escape")     { setStep(-1); }
+});
+
+function run() {
+  $("msgs").innerHTML = "";
+  try {
+    const plan = planFromCSV($("layout").value, $("list").value, {
+      start: $("start").value.trim() || undefined,
+      end: $("end").value.trim() || undefined,
+    });
+    $("total").textContent = plan.totalDistance + " m";
+    $("sub").textContent = `${plan.route.length} stops · ${plan.graph.nodes.length} sections · ${plan.graph.edges.length} connections`;
+    const esc = (x) => String(x).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+    $("matches").innerHTML = plan.matches.map((m) => {
+      const note = m.type === "exact" || m.type === "explicit" ? "" : ` <em>~ ${esc(m.type)}: ${esc(m.matchedItem)}</em>`;
+      const tip = m.alternatives.length ? ` title="Also sold in: ${esc(m.alternatives.join(", "))}"` : "";
+      return `<span class="chip"${tip}>${esc(m.product)} → <b>${esc(m.section)}</b>${note}</span>`;
+    }).join("");
+    const msgs = [...plan.warnings, ...plan.unmatched.map((u) =>
+      `Skipped "${u.product}": ${u.reason}.` + (u.suggestions && u.suggestions.length ? ` Did you mean ${u.suggestions.join(" / ")}?` : ""))];
+    $("msgs").innerHTML = msgs.map((m) => `<div class="warn">${m.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</div>`).join("");
+    draw(plan);
+  } catch (err) {
+    $("msgs").innerHTML = `<div class="err">${String(err.message).replace(/</g,"&lt;")}</div>`;
+  }
+}
+
+$("layout").value = DATA.layout;
+$("list").value = DATA.list;
+$("go").addEventListener("click", run);
+run();
+</script>
+</body>
+</html>

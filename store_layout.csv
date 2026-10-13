@@ -1,0 +1,18 @@
+Section name,Next to,Items,Notes
+Entrance (Grocery),Aisle 1 (10m),,This entrance is on the rightmost side and leads to the grocery station directly
+Entrance (Home and Appliances),Aisle B4,,
+Aisle 1,"Aisle 2, Produce, Entrance","Rice, Flour, Sugar, Salt, Cooking oil",
+Aisle 2,"Aisle 1, Aisle 3, Dairy","Cereal, Oats, Coffee, Tea, Cookies",
+Aisle 3,"Aisle 2, Aisle 4, Bakery","Pasta, Pasta sauce, Canned beans, Soup, Chips",
+Aisle 4,"Aisle 3, Checkout, Frozen (5m)","Water, Soda, Juice, Granola bars",
+Produce,"Aisle 1, Dairy (6m)","Tomato, Spinach, Onion, Potato, Banana, Apple, Lettuce, Avocado",
+Dairy,"Produce, Aisle 2, Bakery (6m)","Milk, Eggs, Cheese, Yogurt, Butter",
+Bakery,"Dairy, Aisle 3, Frozen (6m)","Bread, Bagels, Croissant, Muffins",
+Frozen,"Bakery, Aisle 4, Checkout (8m)","Ice cream, Frozen pizza, Frozen vegetables",
+Checkout,"Aisle 4, Frozen, Aisle B1 (12m)","Batteries, Gum, Candy, Chips",
+Aisle B1,"Checkout, Aisle B2, Electronics (4m)","Phone charger, Cables",
+Aisle B2,"Aisle B1, Aisle B3","Toaster, Kettle, Blender",
+Aisle B3,"Aisle B2, Aisle B4, Household (4m)","Pots, Pans, Towels",
+Aisle B4,"Aisle B3, Entrance (Home and Appliances)","Lamps, Fans",
+Electronics,Aisle B1,"Headphones, Speakers",
+Household,Aisle B3,"Light bulbs, Cleaning spray, Sponges, Trash bags",
